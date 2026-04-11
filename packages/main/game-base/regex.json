@@ -1,0 +1,17 @@
+{
+  "build/script.js": [
+    ["cdvfile://localhost/persistent/data/assets", "../assets"],
+    ["return t\\.m\\s*=\\s*e,\\s*t\\.c\\s*=\\s*i,\\s*t\\.p\\s*=\\s*\"\",\\s*t\\(0\\)", "window.singletons=t;return t.m=e,t.c=i,t.p=\"\",t(0)"],
+    ["window\\.Config\\.analytics", "null"],
+    ["(\\w{1,2}\\.overrideConsole\\s*=)\\s*(function\\(\\))", "$1 function() {}; !1 && $2"],
+    ["(\\w{1,2}\\.logUncaughtExceptions\\s*=)\\s*(function\\()", "$1 function() {}; !1 && $2"],
+    ["(language:\\s*window\\.Config\\s*\\?[\\s\\S]{1,200}client:\\s*)([^,}\\s]*)([\\s\\S]{1,200}appVersion:\\s*)([^,}\\s]*)([\\s\\S]{1,200}buildVersion:\\s*)([^,}\\s]*)", "$1\"android\"$3window._[\"appVersion\"]$5window._[\"buildVersion\"]"],
+    ["(\\w{1,2}\\.exports\\s*=\\s*(\\w{1,2}),\\s*)(\\w{1,2}\\.prototype\\.setLook)", "$1window.CharacterDisplay=$2,$3"],
+    ["Math\\.min\\(Math\\.max\\((\\w),\\s*(\\w)\\),\\s*this\\.maxZoom\\)", "Math.max($1,$2)"],
+    ["=\\s*\\w\\.viewport(Width|Height)\\s*\\|\\|", "="],
+    ["new (\\w)\\(document\\.getElementsByClassName\\(\"dofusBody\"\\)\\[0\\]\\)", "new $1(document.getElementById(\"dofusBody\"))"]
+  ],
+  "build/styles-native.css": [
+    ["cdvfile://localhost/persistent/data/assets", "../assets"]
+  ]
+}

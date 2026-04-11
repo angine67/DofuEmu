@@ -1,0 +1,78 @@
+{
+  "name": "dofemu",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Dofus Touch desktop client",
+  "main": "dist/main/index.cjs",
+  "packageManager": "pnpm@10.11.0",
+  "scripts": {
+    "dev": "node scripts/watch.mjs",
+    "build": "node scripts/build.mjs",
+    "dist": "npm run build && electron-builder",
+    "typecheck": "tsc --noEmit"
+  },
+  "build": {
+    "appId": "com.dofemu.app",
+    "productName": "DofEmu",
+    "icon": "resources/icon.png",
+    "mac": {
+      "icon": "resources/icon.icns",
+      "target": "dmg",
+      "category": "public.app-category.games",
+      "protocols": [
+        {
+          "name": "DofEmu Auth",
+          "schemes": [
+            "dofustouch",
+            "touch",
+            "com.ankama.dofustouch"
+          ]
+        }
+      ]
+    },
+    "win": {
+      "icon": "resources/icon.ico",
+      "target": "nsis"
+    },
+    "linux": {
+      "icon": "resources/icon.png",
+      "target": "AppImage"
+    },
+    "files": [
+      "dist/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    }
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.14.0",
+    "electron-store": "^8.2.0",
+    "get-port": "^5.1.1",
+    "hono": "^4.7.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.1",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.6.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "lucide-react": "^0.577.0",
+    "postcss": "^8.5.8",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.13.0",
+    "tailwindcss": "^4.2.1",
+    "typescript": "~5.8.0",
+    "vite": "^6.0.0",
+    "zustand": "^5.0.12"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  }
+}

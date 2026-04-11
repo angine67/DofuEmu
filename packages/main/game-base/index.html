@@ -1,0 +1,89 @@
+<!DOCTYPE HTML>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <script>
+    window.ontouchstart = function() {};
+
+    window.buildVersion = window.top.buildVersion;
+    window.appVersion = window.top.appVersion;
+    window.appInfo = { version: window.top.appVersion };
+
+    window._ = {
+      appVersion: window.appVersion,
+      buildVersion: window.buildVersion,
+      client: "android"
+    };
+
+    window.indexedDB = {};
+    window.IDBDatabase = {};
+    window.IDBTransaction = {};
+    window.IDBCursor = {};
+    window.IDBKeyRange = {};
+
+    var _deepLinkCallbacks = [];
+
+    window.IonicDeeplink = {
+      onDeepLink: function(cb) {
+        _deepLinkCallbacks.push(cb);
+      }
+    };
+
+    window.cordova = {
+      InAppBrowser: {
+        open: function(url, target) {
+          window.open(url, "_system");
+          return null;
+        }
+      },
+      plugins: {
+        browsertab: {
+          isAvailable: function(cb) { cb(true); },
+          openUrl: function(url, success, error) {
+            window.open(url, "_system");
+            if (success) success();
+          },
+          close: function() {}
+        },
+        isemulator: { assess: function(fn) { fn(false); } },
+        Keyboard: {
+          close: function() {},
+          disableScroll: function() {},
+          show: function() {},
+          hideKeyboardAccessoryBar: function() {}
+        },
+        notification: { local: false },
+        pushNotification: {
+          onDeviceReady: function() {},
+          setUserId: function() {},
+          registerDevice: function() {}
+        }
+      }
+    };
+
+    window.$appSchemeLinkCalled = function(payload) {
+      if (!payload) return;
+      var qs = payload.indexOf('?') !== -1 ? payload.split('?')[1] : payload;
+      for (var i = 0; i < _deepLinkCallbacks.length; i++) {
+        _deepLinkCallbacks[i]({ queryString: qs });
+      }
+    };
+
+    window.initDofus = function(cb) {
+      var head = document.getElementsByTagName('head')[0];
+      var script = document.createElement('script');
+      script.addEventListener('load', function() {
+        var fixes = document.createElement('script');
+        fixes.src = 'fixes.js';
+        head.appendChild(fixes);
+        cb();
+      });
+      script.src = 'build/script.js';
+      head.appendChild(script);
+    };
+  </script>
+  <link rel="stylesheet" href="build/styles-native.css">
+  <link rel="stylesheet" href="fixes.css">
+</head>
+<body></body>
+</html>
