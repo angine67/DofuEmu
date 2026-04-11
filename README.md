@@ -1,4 +1,8 @@
-# DofEmu
+<p align="center">
+  <img src="resources/icon.png" width="120" alt="DofEmu">
+</p>
+
+<h1 align="center">DofEmu</h1>
 
 [![platforms](https://img.shields.io/badge/platforms-windows%20%7C%20macOS%20%7C%20linux-blue)](https://github.com/angine67/DofuEmu/releases)
 [![node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org)
