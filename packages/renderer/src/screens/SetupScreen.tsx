@@ -1,53 +1,110 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { AlertTriangle, CheckCircle2, LoaderCircle, RefreshCw } from 'lucide-react'
+import { colors } from '@/theme'
+import logoImg from '@/assets/logo.png'
 
 type Status = 'checking' | 'downloading' | 'done' | 'error'
 
 const STEPS = [
-  'Copying base files',
-  'Downloading manifests',
-  'Downloading assets',
-  'Downloading game files',
-  'Finding versions',
-  'Applying patches',
-  'Writing files',
-  'Cleaning up',
-  'Saving manifests',
-  'Done'
-]
+  { title: 'Copying base files' },
+  { title: 'Downloading manifests' },
+  { title: 'Downloading assets' },
+  { title: 'Downloading game files' },
+  { title: 'Finding versions' },
+  { title: 'Applying patches' },
+  { title: 'Writing files' },
+  { title: 'Cleaning up' },
+  { title: 'Saving manifests' },
+  { title: 'Done' }
+] as const
+
+const shellStyle: CSSProperties = {
+  flex: 1,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 14,
+  background: colors.bg
+}
 
 function stepFromMessage(msg: string): number {
   const lower = msg.toLowerCase()
   for (let i = STEPS.length - 1; i >= 0; i--) {
-    if (lower.includes(STEPS[i].toLowerCase())) return i
+    if (lower.includes(STEPS[i].title.toLowerCase())) return i
   }
   return 0
 }
 
+function formatMode(installed: boolean): string {
+  return installed ? 'Update' : 'Install'
+}
+
+function getHeadline(status: Status, installed: boolean): string {
+  if (status === 'checking') return 'Checking game files'
+  if (status === 'done') return installed ? 'Update complete' : 'Install complete'
+  if (status === 'error') return installed ? 'Update failed' : 'Install failed'
+  return installed ? 'Updating game' : 'Installing game'
+}
+
+function getSummary(status: Status, installed: boolean): string {
+  if (status === 'checking') return 'Validating local files before starting.'
+  if (status === 'done') return 'Launching the game.'
+  if (status === 'error') return installed ? 'The existing install can still be opened.' : 'Retry the install.'
+  return installed ? 'Applying only the required file updates.' : 'Downloading and patching the game files.'
+}
+
 export function SetupScreen() {
-  const navigate = useNavigate()
   const [status, setStatus] = useState<Status>('checking')
   const [percent, setPercent] = useState(0)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [currentStep, setCurrentStep] = useState(0)
+  const [hasExistingInstall, setHasExistingInstall] = useState(false)
+  const didStartRef = useRef(false)
+  const launchTimeoutRef = useRef<number | null>(null)
+
+  const scheduleLaunch = () => {
+    if (launchTimeoutRef.current !== null) return
+    launchTimeoutRef.current = window.setTimeout(() => {
+      window.dofemu.launchGameWindow()
+    }, 800)
+  }
+
+  const runUpdate = async (installed: boolean) => {
+    setHasExistingInstall(installed)
+    setStatus('downloading')
+    setError('')
+    setPercent(0)
+    setCurrentStep(0)
+    setMessage(installed ? 'Checking for updates...' : 'Preparing initial download...')
+
+    try {
+      await window.dofemu.downloadGame()
+      setStatus('done')
+      scheduleLaunch()
+    } catch (err: unknown) {
+      if (installed) {
+        window.dofemu.logger.warn('Game update failed, launching existing install', err)
+        window.dofemu.launchGameWindow()
+        return
+      }
+
+      setError(err instanceof Error ? err.message : String(err))
+      setStatus('error')
+    }
+  }
 
   useEffect(() => {
+    if (didStartRef.current) return
+    didStartRef.current = true
+
     window.dofemu.checkGameInstalled().then((installed) => {
-      if (installed) {
-        navigate('/game', { replace: true })
-      } else {
-        setStatus('downloading')
-        window.dofemu.downloadGame().then(() => {
-          setStatus('done')
-          setTimeout(() => navigate('/game', { replace: true }), 800)
-        }).catch((err: unknown) => {
-          setError(err instanceof Error ? err.message : String(err))
-          setStatus('error')
-        })
-      }
+      void runUpdate(installed)
+    }).catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : String(err))
+      setStatus('error')
     })
-  }, [navigate])
+  }, [])
 
   useEffect(() => {
     const unsub = window.dofemu.onDownloadProgress((msg, pct) => {
@@ -56,108 +113,123 @@ export function SetupScreen() {
       setCurrentStep(stepFromMessage(msg))
       if (pct >= 100) {
         setStatus('done')
-        setTimeout(() => navigate('/game', { replace: true }), 800)
+        scheduleLaunch()
       }
     })
     return unsub
-  }, [navigate])
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (launchTimeoutRef.current !== null) {
+        window.clearTimeout(launchTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const startDownload = async () => {
-    setStatus('downloading')
-    setError('')
-    setPercent(0)
-    setCurrentStep(0)
-    try {
-      await window.dofemu.downloadGame()
-      setStatus('done')
-      setTimeout(() => navigate('/game', { replace: true }), 800)
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : String(err))
-      setStatus('error')
-    }
+    await runUpdate(hasExistingInstall)
   }
 
+  const safePercent = Math.max(0, Math.min(100, status === 'done' ? 100 : percent))
+  const headline = getHeadline(status, hasExistingInstall)
+  const summary = getSummary(status, hasExistingInstall)
+  const primaryMessage = message || (status === 'checking' ? 'Waiting for updater...' : 'Preparing updater...')
+
   return (
-    <div className="flex flex-1 items-center justify-center">
-      <div className="w-full max-w-md px-10">
-        <div className="mb-8 text-center">
-          <h1 className="text-[22px] font-bold tracking-tight text-foreground">DofEmu</h1>
-          <p className="mt-1 text-[11px] text-muted-foreground/60">Dofus Touch Desktop</p>
+    <div style={shellStyle}>
+      <div
+        style={{
+          width: '100%',
+          border: `1px solid ${colors.brandBorderFaint}`,
+          borderRadius: 10,
+          background: colors.bg,
+          boxShadow: colors.modalShadow,
+          padding: 14
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <img src={logoImg} alt="" style={{ width: 18, height: 18 }} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: colors.text }}>DofEmu</div>
+            <div style={{ fontSize: 11, color: colors.textMuted }}>{formatMode(hasExistingInstall)} window</div>
+          </div>
         </div>
 
-        {status === 'checking' && (
-          <div className="text-center">
-            <div className="mx-auto h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground/20 border-t-primary" />
-            <p className="mt-3 text-[11px] text-muted-foreground">Checking installation...</p>
-          </div>
-        )}
+        <div style={{ fontSize: 18, fontWeight: 700, color: colors.text, marginBottom: 4 }}>
+          {headline}
+        </div>
+        <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 10 }}>
+          {summary}
+        </div>
 
-        {(status === 'downloading' || status === 'done') && (
-          <div className="space-y-6">
-            <div className="space-y-3">
-              {STEPS.map((step, i) => {
-                const isDone = currentStep > i || status === 'done'
-                const isActive = currentStep === i && status !== 'done'
-                return (
-                  <div
-                    key={step}
-                    className="flex items-center gap-3"
-                    style={{ opacity: isDone ? 0.4 : isActive ? 1 : 0.15, transition: 'opacity 0.3s' }}
-                  >
-                    <div
-                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[8px] font-bold"
-                      style={{
-                        background: isDone ? 'hsl(var(--primary))' : isActive ? 'hsl(var(--primary) / 0.15)' : 'hsl(var(--muted-foreground) / 0.1)',
-                        color: isDone ? 'hsl(var(--primary-foreground))' : isActive ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground) / 0.4)',
-                        border: isActive ? '1.5px solid hsl(var(--primary) / 0.5)' : '1.5px solid transparent',
-                        transition: 'all 0.3s'
-                      }}
-                    >
-                      {isDone ? '\u2713' : i + 1}
-                    </div>
-                    <span className="text-[11px] text-foreground">{step}</span>
-                    {isActive && (
-                      <div className="ml-auto h-3 w-3 animate-spin rounded-full border border-muted-foreground/20 border-t-primary" />
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="relative h-1 w-full overflow-hidden rounded-full bg-white/[0.06]">
-                <div
-                  className="h-full rounded-full bg-primary"
-                  style={{
-                    width: `${status === 'done' ? 100 : percent}%`,
-                    transition: 'width 0.5s ease-out'
-                  }}
-                />
-              </div>
-              <div className="flex justify-between font-mono text-[9px] text-muted-foreground/50">
-                <span>{message}</span>
-                <span>{(status === 'done' ? 100 : percent).toFixed(0)}%</span>
-              </div>
-            </div>
-
-            {status === 'done' && (
-              <p className="text-center text-[11px] text-primary">Launching game...</p>
+        <div
+          style={{
+            border: `1px solid ${status === 'error' ? 'rgba(255,68,68,0.25)' : colors.border}`,
+            borderRadius: 8,
+            background: status === 'error' ? 'rgba(244,68,68,0.05)' : colors.surface,
+            padding: 12,
+            marginBottom: status === 'error' ? 10 : 0
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            {status === 'done' ? (
+              <CheckCircle2 size={16} color={colors.accentText} />
+            ) : status === 'error' ? (
+              <AlertTriangle size={16} color={colors.danger} />
+            ) : (
+              <LoaderCircle size={16} color={colors.accentText} style={{ animation: 'dofemu-spin 1.2s linear infinite' }} />
             )}
+            <div style={{ fontSize: 12, color: status === 'error' ? colors.danger : colors.textSecondary }}>
+              {status === 'error' ? error : primaryMessage}
+            </div>
           </div>
-        )}
+
+          <div
+            style={{
+              height: 8,
+              borderRadius: 999,
+              overflow: 'hidden',
+              background: 'rgba(255,255,255,0.06)'
+            }}
+          >
+            <div
+              style={{
+                width: `${safePercent}%`,
+                height: '100%',
+                borderRadius: 999,
+                background: `linear-gradient(90deg, ${colors.brandMuted}, ${colors.accent})`,
+                transition: 'width 0.3s ease'
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 8, fontSize: 11, color: colors.textMuted }}>
+            <span>{STEPS[Math.min(currentStep, STEPS.length - 1)]?.title}</span>
+            <span style={{ fontFamily: 'var(--font-mono)' }}>{safePercent.toFixed(0)}%</span>
+          </div>
+        </div>
 
         {status === 'error' && (
-          <div className="space-y-4 text-center">
-            <div className="rounded-lg border border-destructive/30 bg-destructive/[0.05] p-4">
-              <p className="text-[11px] text-destructive">{error}</p>
-            </div>
-            <button
-              onClick={startDownload}
-              className="rounded-md border border-primary/40 bg-primary/10 px-6 py-2 text-[12px] text-primary transition-colors hover:bg-primary/20"
-            >
-              Retry Download
-            </button>
-          </div>
+          <button
+            onClick={startDownload}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '9px 12px',
+              borderRadius: 8,
+              border: `1px solid ${colors.accentBorder}`,
+              background: 'rgba(201,162,77,0.10)',
+              color: colors.accentText,
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            <RefreshCw size={14} />
+            <span>{hasExistingInstall ? 'Retry Update' : 'Retry Download'}</span>
+          </button>
         )}
       </div>
     </div>

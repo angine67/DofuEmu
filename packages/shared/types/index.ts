@@ -42,6 +42,12 @@ export interface AppSettings {
   version: string
 }
 
+export interface NativeNotificationPayload {
+  title: string
+  body?: string
+  tabId?: string
+}
+
 export type HotkeyAction =
   | 'switch-tab-1'
   | 'switch-tab-2'
@@ -51,6 +57,7 @@ export type HotkeyAction =
   | 'new-tab'
   | 'close-tab'
   | 'toggle-mute'
+  | 'toggle-notifications'
   | 'next-tab'
   | 'prev-tab'
   | 'zoom-in'
@@ -89,6 +96,7 @@ export const HOTKEY_ACTIONS: HotkeyAction[] = [
   'new-tab',
   'close-tab',
   'toggle-mute',
+  'toggle-notifications',
   'next-tab',
   'prev-tab',
   'zoom-in',
@@ -104,6 +112,7 @@ export const HOTKEY_ACTION_LABELS: Record<HotkeyAction, string> = {
   'new-tab': 'New Tab',
   'close-tab': 'Close Tab',
   'toggle-mute': 'Toggle Mute',
+  'toggle-notifications': 'Toggle Notifications',
   'next-tab': 'Next Tab',
   'prev-tab': 'Previous Tab',
   'zoom-in': 'Zoom In',
@@ -119,6 +128,7 @@ export const DEFAULT_HOTKEYS: Record<HotkeyAction, string> = {
   'new-tab': 'Ctrl+T',
   'close-tab': 'Ctrl+W',
   'toggle-mute': 'Ctrl+M',
+  'toggle-notifications': 'Ctrl+Shift+N',
   'next-tab': 'Ctrl+Tab',
   'prev-tab': 'Ctrl+Shift+Tab',
   'zoom-in': 'Ctrl+=',
@@ -162,7 +172,10 @@ export enum IPCEvents {
   DOWNLOAD_PROGRESS = 'download_progress',
   CHECK_GAME_INSTALLED = 'check_game_installed',
   DOWNLOAD_GAME = 'download_game',
+  OPEN_GAME_WINDOW = 'open_game_window',
   SAVE_CHARACTER_IMAGE = 'save_character_image',
+  SHOW_NATIVE_NOTIFICATION = 'show_native_notification',
+  NATIVE_NOTIFICATION_CLICK = 'native_notification_click',
   STORE_GET = 'store_get',
   STORE_SET = 'store_set',
   STORE_DELETE = 'store_delete'

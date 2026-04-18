@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import type { GameContext } from '@dofemu/shared'
+import type { NativeNotificationPayload } from '@dofemu/shared'
 
 interface DofemuAPI {
   fetchGameContext(): Promise<GameContext>
@@ -13,10 +14,13 @@ interface DofemuAPI {
   setSettings(settings: string): void
   checkGameInstalled(): Promise<boolean>
   downloadGame(): Promise<void>
+  launchGameWindow(): void
   onAuthCallback(cb: (url: string) => void): () => void
   onSelectTab(cb: (index: number) => void): () => void
   onDownloadProgress(cb: (message: string, percent: number) => void): () => void
   saveCharacterImage(name: string, imageData: string): void
+  showNativeNotification(payload: NativeNotificationPayload): void
+  onNativeNotificationClick(cb: (tabId?: string) => void): () => void
   setSoundOnFocus(value: boolean): void
   storeGet(key: string): Promise<string | null>
   storeSet(key: string, value: string): void

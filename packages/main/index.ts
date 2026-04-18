@@ -20,8 +20,9 @@ app.commandLine.appendSwitch('max-active-webgl-contexts', '32')
 if (process.platform === 'win32') app.setAppUserModelId(app.getName())
 
 if (!app.requestSingleInstanceLock()) {
-  logger.warn('Another instance is already running — focusing it instead.')
-  app.quit()
+  logger.warn('Another instance is already running — exiting.')
+  app.exit(0)
+  process.exit(0)
 }
 
 for (const scheme of APP_SCHEME_PROTOCOLS) {
@@ -40,10 +41,18 @@ function isAuthUrl(url: string): boolean {
   return APP_SCHEME_PROTOCOLS.some((s) => url.startsWith(s + '://'))
 }
 
+let pendingAuthUrl: string | null = null
+
 function handleAuthUrl(url: string) {
   if (!isAuthUrl(url)) return
   logger.info(`Auth URL received: ${url.substring(0, 60)}...`)
-  Application.instance?.processAuthCallback(url)
+  const instance = Application.instance
+  if (!instance || !instance.gameWindow) {
+    logger.info('Application not ready — queueing auth URL for replay.')
+    pendingAuthUrl = url
+    return
+  }
+  instance.processAuthCallback(url)
 }
 
 if (process.platform === 'darwin') {
@@ -55,11 +64,7 @@ if (process.platform === 'darwin') {
   app.on('second-instance', (_event, commandLine) => {
     const url = commandLine[commandLine.length - 1]
     handleAuthUrl(url)
-    const win = Application.instance?.gameWindow
-    if (win) {
-      if (win.isMinimized()) win.restore()
-      win.focus()
-    }
+    Application.instance?.ensureWindow()
   })
 }
 
@@ -73,6 +78,13 @@ app.whenReady().then(async () => {
 
   await Application.init()
   Application.instance.run()
+
+  if (pendingAuthUrl) {
+    const url = pendingAuthUrl
+    pendingAuthUrl = null
+    logger.info('Replaying queued auth URL after app ready.')
+    handleAuthUrl(url)
+  }
 })
 
 app.on('window-all-closed', () => {

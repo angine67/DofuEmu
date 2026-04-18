@@ -1,12 +1,10 @@
 import { useEffect, useState, createContext, useContext } from 'react'
-import { HashRouter, Routes, Route } from 'react-router-dom'
-import { Minus, Square, X } from 'lucide-react'
-import { WindowButton } from '@/components/WindowButton'
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { X } from 'lucide-react'
 import { SetupScreen } from '@/screens/SetupScreen'
 import { GameScreen } from '@/screens/GameScreen'
 import { SettingsScreen } from '@/screens/SettingsScreen'
 import { colors } from '@/theme'
-import logoImg from '@/assets/logo.png'
 
 const SettingsContext = createContext<{
   settingsOpen: boolean
@@ -14,36 +12,6 @@ const SettingsContext = createContext<{
 }>({ settingsOpen: false, setSettingsOpen: () => {} })
 
 export const useSettings = () => useContext(SettingsContext)
-
-function TitleBar() {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        height: 32,
-        paddingLeft: 12,
-        background: colors.titlebar,
-        borderBottom: `1px solid ${colors.brandBorder}`,
-        userSelect: 'none',
-        WebkitAppRegion: 'drag',
-      } as React.CSSProperties}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <img src={logoImg} alt="" style={{ width: 16, height: 16 }} />
-        <span style={{ fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.08em', color: colors.brand, textTransform: 'uppercase' }}>
-          DofEmu
-        </span>
-      </div>
-      <div style={{ display: 'flex', height: '100%', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-        <WindowButton onClick={() => window.dofemu.minimize()}><Minus size={14} /></WindowButton>
-        <WindowButton onClick={() => window.dofemu.maximize()}><Square size={11} /></WindowButton>
-        <WindowButton onClick={() => window.dofemu.close()} hoverBg={colors.dangerClose}><X size={14} /></WindowButton>
-      </div>
-    </div>
-  )
-}
 
 function SettingsOverlay() {
   const { settingsOpen, setSettingsOpen } = useSettings()
@@ -98,7 +66,8 @@ export function App() {
       <HashRouter>
         <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden' }}>
           <Routes>
-            <Route path="/" element={<><TitleBar /><div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}><SetupScreen /></div></>} />
+            <Route path="/" element={<Navigate to="/updater" replace />} />
+            <Route path="/updater" element={<SetupScreen />} />
             <Route path="/game" element={<GameScreen />} />
           </Routes>
           <SettingsOverlay />

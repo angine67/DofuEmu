@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
-import { IPCEvents, GameContext } from '@dofemu/shared'
+import { IPCEvents, GameContext, NativeNotificationPayload } from '@dofemu/shared'
 
 const dofemuApi = {
   fetchGameContext: async (): Promise<GameContext> => {
@@ -51,6 +51,10 @@ const dofemuApi = {
     await ipcRenderer.invoke(IPCEvents.DOWNLOAD_GAME)
   },
 
+  launchGameWindow: () => {
+    ipcRenderer.send(IPCEvents.OPEN_GAME_WINDOW)
+  },
+
   onAuthCallback: (cb: (url: string) => void): (() => void) => {
     const listener = (_: IpcRendererEvent, url: string) => cb(url)
     ipcRenderer.on(IPCEvents.AUTH_CALLBACK, listener)
@@ -71,6 +75,16 @@ const dofemuApi = {
 
   saveCharacterImage: (name: string, imageData: string) => {
     ipcRenderer.send(IPCEvents.SAVE_CHARACTER_IMAGE, name, imageData)
+  },
+
+  showNativeNotification: (payload: NativeNotificationPayload) => {
+    ipcRenderer.send(IPCEvents.SHOW_NATIVE_NOTIFICATION, payload)
+  },
+
+  onNativeNotificationClick: (cb: (tabId?: string) => void): (() => void) => {
+    const listener = (_: IpcRendererEvent, tabId?: string) => cb(tabId)
+    ipcRenderer.on(IPCEvents.NATIVE_NOTIFICATION_CLICK, listener)
+    return () => { ipcRenderer.removeListener(IPCEvents.NATIVE_NOTIFICATION_CLICK, listener) }
   },
 
   storeGet: async (key: string): Promise<string | null> => {

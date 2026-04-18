@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, Notification, shell } from 'electron'
 import { Hono, type Context } from 'hono'
 import { serve } from '@hono/node-server'
 import crypto from 'crypto'
@@ -7,9 +7,10 @@ import { AddressInfo } from 'net'
 import { join } from 'path'
 import fs from 'fs'
 import ElectronStore from 'electron-store'
-import { IPCEvents, GameContext } from '@dofemu/shared'
+import { IPCEvents, GameContext, NativeNotificationPayload } from '@dofemu/shared'
 import { get } from './constants'
 import { GameWindow } from './windows/game-window'
+import { UpdaterWindow } from './windows/updater-window'
 import { GameUpdater } from './updater'
 import { logger } from './logger'
 import { platform } from 'os'
@@ -69,11 +70,13 @@ type StoreSchema = Record<string, unknown>
 export class Application {
   private static _instance: Application | null = null
   private _gameWindow: GameWindow | null = null
+  private _updaterWindow: UpdaterWindow | null = null
   private readonly _server: Server
   private readonly _hash: string
   private _buildVersion = ''
   private _appVersion = ''
   private _store: ElectronStore<StoreSchema>
+  private _startupComplete = false
 
   static async init() {
     if (Application._instance) throw new Error('Application already initialized')
@@ -150,11 +153,20 @@ export class Application {
   }
 
   ensureWindow() {
+    if (this._updaterWindow) {
+      if (this._updaterWindow.isMinimized()) this._updaterWindow.restore()
+      this._updaterWindow.focus()
+      return
+    }
+
     if (this._gameWindow) {
+      if (this._gameWindow.isMinimized()) this._gameWindow.restore()
       this._gameWindow.focus()
       return
     }
-    this._createGameWindow()
+
+    if (this._startupComplete) this._createGameWindow()
+    else this._createUpdaterWindow()
   }
 
   setBuildVersion(v: string) { this._buildVersion = v }
@@ -166,17 +178,44 @@ export class Application {
   }
 
   private _createGameWindow() {
-    const devServer = process.env['VITE_DEV_SERVER_HOST'] && process.env['VITE_DEV_SERVER_PORT']
-    const url = devServer
-      ? `http://${process.env['VITE_DEV_SERVER_HOST']}:${process.env['VITE_DEV_SERVER_PORT']}`
-      : `${this.localBase}/renderer/index.html`
-
-    this._gameWindow = new GameWindow({ url, index: 0 })
+    this._gameWindow = new GameWindow({ url: this._getRendererUrl('/game'), index: 0 })
 
     this._gameWindow.on('closed', () => {
       this._gameWindow = null
-      app.quit()
+      if (!this._updaterWindow) app.quit()
     })
+  }
+
+  private _createUpdaterWindow() {
+    this._updaterWindow = new UpdaterWindow({ url: this._getRendererUrl('/updater') })
+
+    this._updaterWindow.on('closed', () => {
+      this._updaterWindow = null
+      if (!this._gameWindow) app.quit()
+    })
+  }
+
+  private _getRendererUrl(route: '/game' | '/updater') {
+    const devServer = process.env['VITE_DEV_SERVER_HOST'] && process.env['VITE_DEV_SERVER_PORT']
+    return devServer
+      ? `http://${process.env['VITE_DEV_SERVER_HOST']}:${process.env['VITE_DEV_SERVER_PORT']}#${route}`
+      : `${this.localBase}/renderer/index.html#${route}`
+  }
+
+  private _openGameWindow() {
+    this._startupComplete = true
+
+    if (!this._gameWindow) {
+      this._createGameWindow()
+    } else {
+      this._gameWindow.focus()
+    }
+
+    if (this._updaterWindow) {
+      const updaterWindow = this._updaterWindow
+      this._updaterWindow = null
+      updaterWindow.close()
+    }
   }
 
   private _setupIPCHandlers() {
@@ -262,8 +301,29 @@ export class Application {
       })
     })
 
+    ipcMain.on(IPCEvents.SHOW_NATIVE_NOTIFICATION, (event, payload: NativeNotificationPayload) => {
+      if (!Notification.isSupported() || !payload?.title) return
+
+      const win = BrowserWindow.fromWebContents(event.sender)
+      const notification = new Notification({
+        title: payload.title.slice(0, 120),
+        body: payload.body?.slice(0, 260)
+      })
+
+      notification.on('click', () => {
+        if (win) {
+          if (win.isMinimized()) win.restore()
+          win.show()
+          win.focus()
+          win.webContents.send(IPCEvents.NATIVE_NOTIFICATION_CLICK, payload.tabId)
+        }
+      })
+
+      notification.show()
+    })
+
     ipcMain.handle(IPCEvents.CHECK_GAME_INSTALLED, () => {
-      return fs.existsSync(join(get.GAME_PATH(), 'index.html'))
+      return ['index.html', join('build', 'script.js')].every((file) => fs.existsSync(join(get.GAME_PATH(), file)))
     })
 
     ipcMain.handle(IPCEvents.DOWNLOAD_GAME, async (event) => {
@@ -281,6 +341,10 @@ export class Application {
         logger.error('Game download failed', err)
         throw err
       }
+    })
+
+    ipcMain.on(IPCEvents.OPEN_GAME_WINDOW, () => {
+      this._openGameWindow()
     })
   }
 }
