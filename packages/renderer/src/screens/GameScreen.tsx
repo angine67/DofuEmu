@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, type CSSProperties } from 'react'
 import { useSettings } from '@/App'
 import { Plus, X, Settings, Minus, Square, Copy } from 'lucide-react'
 import { WindowButton } from '@/components/WindowButton'
@@ -7,10 +7,13 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useTeamStore } from '@/stores/teamStore'
 import { useHotkeys } from '@/hooks/use-hotkeys'
 import { initAutoGroup, broadcastLeaderPosition, destroyAutoGroup, sendPartyInvite, autoAcceptPartyInvite } from '@/mods/auto-group'
+import { initNotificationFocus } from '@/mods/notification-focus'
 import { colors } from '@/theme'
 import { DofusWindow, HTMLIFrameElementWithDofus } from '@/types/dofus-window'
 import { captureCharacterIcon } from '@/utils/capture-icon'
 import type { HotkeyAction } from '@dofemu/shared'
+import logoImg from '@/assets/logo.png'
+import loadingBgImg from '@/assets/game-loading-bg.jpg'
 
 const TITLEBAR_HEIGHT = 32
 const MAX_POLL_ATTEMPTS = 50
@@ -27,14 +30,118 @@ declare global {
   }
 }
 
+const loadingBackdropStyle: CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  overflow: 'hidden',
+  background: '#07080c'
+}
+
+function GameLoadingBackdrop({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div style={loadingBackdropStyle}>
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage: `url(${loadingBgImg})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center center',
+          transform: 'scale(1.05)',
+          filter: 'saturate(1.02)'
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'linear-gradient(180deg, rgba(7,8,12,0.18) 0%, rgba(7,8,12,0.6) 42%, rgba(7,8,12,0.92) 100%)'
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'linear-gradient(90deg, rgba(7,8,12,0.88) 0%, rgba(7,8,12,0.36) 44%, rgba(7,8,12,0.82) 100%)'
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          left: '8%',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          width: 'min(420px, 78vw)',
+          padding: '24px 24px 22px',
+          borderRadius: 22,
+          border: '1px solid rgba(255,255,255,0.08)',
+          background: 'linear-gradient(180deg, rgba(8,10,16,0.74) 0%, rgba(8,10,16,0.86) 100%)',
+          boxShadow: '0 24px 70px rgba(0,0,0,0.45)',
+          backdropFilter: 'blur(8px)'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+          <img src={logoImg} alt="" style={{ width: 44, height: 44, filter: 'drop-shadow(0 0 18px rgba(201,162,77,0.4))' }} />
+          <div>
+            <div style={{ fontSize: 12, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(201,162,77,0.92)', fontWeight: 700 }}>
+              DofEmu
+            </div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>Preparing the client</div>
+          </div>
+        </div>
+
+        <div style={{ fontSize: 34, lineHeight: 1.05, fontWeight: 800, color: '#fff', marginBottom: 10 }}>
+          {title}
+        </div>
+        <div style={{ fontSize: 14, lineHeight: 1.6, color: 'rgba(255,255,255,0.64)', marginBottom: 18 }}>
+          {subtitle}
+        </div>
+
+        <div
+          style={{
+            height: 10,
+            borderRadius: 999,
+            background: 'rgba(255,255,255,0.1)',
+            overflow: 'hidden'
+          }}
+        >
+          <div
+            style={{
+              width: '42%',
+              height: '100%',
+              borderRadius: 999,
+              background: 'linear-gradient(90deg, rgba(201,162,77,0.62) 0%, rgba(232,199,106,0.98) 100%)',
+              boxShadow: '0 0 24px rgba(201,162,77,0.28)',
+              animation: 'dofemu-pulse 2s ease-in-out infinite',
+              transformOrigin: 'left center'
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 
 function GameIframe({ tab, gameSrc, isVisible }: { tab: GameTab; gameSrc: string; isVisible: boolean }) {
   const iframeRef = useRef<HTMLIFrameElementWithDofus>(null)
-  const { setTabReady, setTabLoading, setTabCharacter, setTabIcon, activeTabId } = useGameTabStore()
+  const cleanupRef = useRef<Array<() => void>>([])
+  const { setTabReady, setTabLoading, setTabCharacter } = useGameTabStore()
+
+  const cleanupGameListeners = () => {
+    for (const cleanup of cleanupRef.current) cleanup()
+    cleanupRef.current = []
+  }
+
+  useEffect(() => cleanupGameListeners, [])
 
   const handleLoad = () => {
     if (!iframeRef.current) return
+    cleanupGameListeners()
+
     const gameWindow = iframeRef.current.contentWindow
+    setTabReady(tab.id, false)
+    setTabLoading(tab.id, true)
 
     gameWindow.openDatabase = undefined
     gameWindow.initDofus(() => {
@@ -62,6 +169,7 @@ function GameIframe({ tab, gameSrc, isVisible }: { tab: GameTab; gameSrc: string
 
       const observer = new ResizeObserver(kickResize)
       if (iframeRef.current) observer.observe(iframeRef.current)
+      cleanupRef.current.push(() => observer.disconnect())
 
       const gw = gameWindow as any
 
@@ -121,6 +229,12 @@ function GameIframe({ tab, gameSrc, isVisible }: { tab: GameTab; gameSrc: string
           })
         })
 
+        cleanupRef.current.push(initNotificationFocus(gameWindow, tab.id, {
+          shouldNotify: () => useSettingsStore.getState().game.notificationsEnabled,
+          isActiveTab: (tabId) => useGameTabStore.getState().activeTabId === tabId,
+          focusTab: (tabId) => useGameTabStore.getState().setActiveTab(tabId)
+        }))
+
         return true
       }
 
@@ -134,20 +248,37 @@ function GameIframe({ tab, gameSrc, isVisible }: { tab: GameTab; gameSrc: string
   }
 
   return (
-    <iframe
-      ref={iframeRef}
-      onLoad={handleLoad}
-      src={gameSrc + '?id=' + tab.id}
+    <div
       style={{
-        border: 'none',
-        width: '100%',
-        height: '100%',
         position: 'absolute',
         top: 0,
         left: 0,
+        right: 0,
+        bottom: 0,
         display: isVisible ? 'block' : 'none'
       }}
-    />
+    >
+      <iframe
+        ref={iframeRef}
+        onLoad={handleLoad}
+        src={gameSrc + '?id=' + tab.id}
+        style={{
+          border: 'none',
+          width: '100%',
+          height: '100%',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          display: 'block'
+        }}
+      />
+      {!tab.isReady && (
+        <GameLoadingBackdrop
+          title="Loading game assets"
+          subtitle={`Opening ${tab.characterName || tab.name}. The game screen will appear as soon as the client finishes booting.`}
+        />
+      )}
+    </div>
   )
 }
 
@@ -201,10 +332,17 @@ export function GameScreen() {
   }, [])
 
   useEffect(() => {
+    return window.dofemu.onNativeNotificationClick((tabId) => {
+      if (tabId) useGameTabStore.getState().setActiveTab(tabId)
+    })
+  }, [])
+
+  useEffect(() => {
     window.dofemu.fetchGameContext().then((ctx) => {
       window.buildVersion = ctx.buildVersion
       window.appVersion = ctx.appVersion
       window.appInfo = { version: ctx.appVersion }
+      ;(window as typeof window & { platform?: string }).platform = ctx.platform
       setGameSrc(ctx.gameSrc)
     })
   }, [])
@@ -233,6 +371,9 @@ export function GameScreen() {
           break
         case 'toggle-mute':
           useSettingsStore.getState().toggleAudioMute()
+          break
+        case 'toggle-notifications':
+          useSettingsStore.getState().toggleNotifications()
           break
         case 'next-tab': {
           const currentIdx = currentTabs.findIndex((t) => t.id === currentActiveId)
@@ -308,8 +449,11 @@ export function GameScreen() {
 
   if (!gameSrc) {
     return (
-      <div className="flex flex-1 items-center justify-center">
-        <p className="text-sm text-muted-foreground">Loading game...</p>
+      <div style={{ position: 'relative', flex: 1 }}>
+        <GameLoadingBackdrop
+          title="Starting DofEmu"
+          subtitle="Loading the local game context and preparing the client shell."
+        />
       </div>
     )
   }

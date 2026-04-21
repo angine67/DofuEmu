@@ -44,6 +44,7 @@ const defaultHotkeys: HotkeyMap = {
   'new-tab': 'Ctrl+T',
   'close-tab': 'Ctrl+W',
   'toggle-mute': 'Ctrl+M',
+  'toggle-notifications': 'Ctrl+Shift+N',
   'next-tab': 'Ctrl+Tab',
   'prev-tab': 'Ctrl+Shift+Tab',
   'zoom-in': 'Ctrl+=',
