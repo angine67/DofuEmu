@@ -81,8 +81,14 @@ export class GameUpdater {
     this._copyBaseFiles()
 
     this._onProgress('Downloading manifests...', 10)
-    const [, remoteAsset, assetDiff] = await this._retrieveManifests(get.LOCAL_ASSET_MAP_PATH(), DOFUS_ORIGIN + 'assetMap.json')
-    const [, remoteDofus, dofusDiff] = await this._retrieveManifests(get.LOCAL_DOFUS_MANIFEST_PATH(), DOFUS_ORIGIN + 'manifest.json')
+    const [localAsset, remoteAsset, assetDiff] = await this._retrieveManifests(
+      get.LOCAL_ASSET_MAP_PATH(),
+      DOFUS_ORIGIN + 'assetMap.json'
+    )
+    const [localDofus, remoteDofus, dofusDiff] = await this._retrieveManifests(
+      get.LOCAL_DOFUS_MANIFEST_PATH(),
+      DOFUS_ORIGIN + 'manifest.json'
+    )
 
     this._onProgress('Downloading assets...', 15)
     await this._downloadAssetFiles(assetDiff, remoteAsset)
@@ -100,7 +106,8 @@ export class GameUpdater {
     this._writeFiles(dofusFiles)
 
     this._onProgress('Cleaning up...', 90)
-    this._removeOld(dofusDiff, remoteDofus)
+    this._removeOld(assetDiff, localAsset)
+    this._removeOld(dofusDiff, localDofus)
 
     this._onProgress('Saving manifests...', 95)
     await Promise.all([
@@ -116,7 +123,7 @@ export class GameUpdater {
   private _copyBaseFiles() {
     const baseDir = path.join(__dirname, '../game-base')
     const gamePath = get.GAME_PATH()
-    const files = ['index.html', 'fixes.js', 'fixes.css', 'regex.json']
+    const files = ['index.html', 'fixes.js', 'fixes.css', 'regex.json', 'keymaster2.js']
 
     for (const file of files) {
       const src = path.join(baseDir, file)
@@ -187,16 +194,22 @@ export class GameUpdater {
       ? JSON.parse(fs.readFileSync(get.LOCAL_VERSIONS_PATH(), 'utf-8'))
       : { buildVersion: '', appVersion: '' }
 
-    const script = dofusFiles['build/script.js']
+    const localScriptPath = path.join(get.GAME_PATH(), 'build', 'script.js')
+    const script =
+      dofusFiles['build/script.js'] ??
+      (fs.existsSync(localScriptPath) ? fs.readFileSync(localScriptPath, 'utf-8') : undefined)
+
     if (script) {
       const match = script.match(/window\.buildVersion\s?=\s?"(\d+\.\d+\.\d+(?:-\d+)?)"/)
       if (match) existing.buildVersion = match[1]
 
-      try {
-        const iTunes = await fetchJson<ItunesLookup>(DOFUS_ITUNES + '&t=' + Date.now())
-        existing.appVersion = iTunes.results[0].version
-      } catch (err) {
-        logger.warn('Could not fetch iTunes version', err)
+      if (dofusFiles['build/script.js'] || !existing.appVersion) {
+        try {
+          const iTunes = await fetchJson<ItunesLookup>(DOFUS_ITUNES + '&t=' + Date.now())
+          existing.appVersion = iTunes.results[0]?.version ?? existing.appVersion
+        } catch (err) {
+          logger.warn('Could not fetch iTunes version', err)
+        }
       }
     }
 
@@ -237,15 +250,18 @@ export class GameUpdater {
 
   private _removeOld(diff: DiffManifest, manifest: Manifest) {
     for (const key in diff) {
-      if (diff[key] === -1 && manifest.files?.[key]) {
-        const filePath = get.GAME_PATH() + manifest.files[key].filename
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath)
-          const dir = path.dirname(filePath)
-          try {
-            if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir)
-          } catch {}
-        }
+      if (diff[key] !== -1) continue
+
+      const file = manifest.files?.[key]
+      if (!file) continue
+
+      const filePath = get.GAME_PATH() + file.filename
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath)
+        const dir = path.dirname(filePath)
+        try {
+          if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir)
+        } catch {}
       }
     }
   }

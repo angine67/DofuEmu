@@ -1,89 +1,125 @@
 <!DOCTYPE HTML>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <script>
-    window.ontouchstart = function() {};
+<html lang="fr">
+  <head>
+    <script>
+      // Touch fix
+      window.ontouchstart = function(e) {};
 
-    window.buildVersion = window.top.buildVersion;
-    window.appVersion = window.top.appVersion;
-    window.appInfo = { version: window.top.appVersion };
+      // Init
+      window.buildVersion = window.top.buildVersion;
+      window.appVersion = window.top.appVersion;
+      window.appInfo = {
+        version: window.top.appVersion
+      };
 
-    window._ = {
-      appVersion: window.appVersion,
-      buildVersion: window.buildVersion,
-      client: "android"
-    };
+      window._ = {
+        appVersion: window.appVersion,
+        buildVersion: window.buildVersion,
+        client: "android"
+      };
 
-    window.indexedDB = {};
-    window.IDBDatabase = {};
-    window.IDBTransaction = {};
-    window.IDBCursor = {};
-    window.IDBKeyRange = {};
+      window.indexedDB = {};
+      window.IDBDatabase = {};
+      window.IDBTransaction = {};
+      window.IDBCursor = {};
+      window.IDBKeyRange = {};
 
-    var _deepLinkCallbacks = [];
+      var _deepLinkCallbacks = [];
 
-    window.IonicDeeplink = {
-      onDeepLink: function(cb) {
-        _deepLinkCallbacks.push(cb);
-      }
-    };
-
-    window.cordova = {
-      InAppBrowser: {
-        open: function(url, target) {
-          window.open(url, "_system");
-          return null;
+      window.IonicDeeplink = {
+        onDeepLink: function(cb) {
+          _deepLinkCallbacks.push(cb);
         }
-      },
-      plugins: {
-        browsertab: {
-          isAvailable: function(cb) { cb(true); },
-          openUrl: function(url, success, error) {
+      };
+
+      window.cordova = {
+        InAppBrowser: {
+          open: function(url, target) {
             window.open(url, "_system");
-            if (success) success();
+            return null;
+          }
+        },
+        plugins: {
+          browsertab: {
+            isAvailable: function(cb) {
+              cb(true);
+            },
+            openUrl: function(url, success, error) {
+              window.open(url, "_system");
+              if (success) success();
+            },
+            close: function() {}
           },
-          close: function() {}
-        },
-        isemulator: { assess: function(fn) { fn(false); } },
-        Keyboard: {
-          close: function() {},
-          disableScroll: function() {},
-          show: function() {},
-          hideKeyboardAccessoryBar: function() {}
-        },
-        notification: { local: false },
-        pushNotification: {
-          onDeviceReady: function() {},
-          setUserId: function() {},
-          registerDevice: function() {}
+          isemulator: {
+            assess: function(fct) {
+              fct(false);
+            }
+          },
+          Keyboard: {
+            close: function() {},
+            disableScroll: function() {},
+            show: function() {},
+            hideKeyboardAccessoryBar: function() {}
+          },
+          notification: {
+            local: false
+          },
+          pushNotification: {
+            onDeviceReady: function() {},
+            setUserId: function() {},
+            registerDevice: function() {}
+          }
         }
-      }
-    };
+      };
 
-    window.$appSchemeLinkCalled = function(payload) {
-      if (!payload) return;
-      var qs = payload.indexOf('?') !== -1 ? payload.split('?')[1] : payload;
-      for (var i = 0; i < _deepLinkCallbacks.length; i++) {
-        _deepLinkCallbacks[i]({ queryString: qs });
-      }
-    };
+      window.$appSchemeLinkCalled = function(payload) {
+        if (!payload) return;
+        var qs = payload.indexOf("?") !== -1 ? payload.split("?")[1] : payload;
+        for (var i = 0; i < _deepLinkCallbacks.length; i++) {
+          _deepLinkCallbacks[i]({ queryString: qs });
+        }
+      };
 
-    window.initDofus = function(cb) {
-      var head = document.getElementsByTagName('head')[0];
-      var script = document.createElement('script');
-      script.addEventListener('load', function() {
-        var fixes = document.createElement('script');
-        fixes.src = 'fixes.js';
-        head.appendChild(fixes);
-        cb();
-      });
-      script.src = 'build/script.js';
-      head.appendChild(script);
-    };
-  </script>
-  <link rel="stylesheet" href="build/styles-native.css">
-  <link rel="stylesheet" href="fixes.css">
-</head>
-<body></body>
+      if (window.top.platform == "darwin") {
+        (function() {
+          window.requestAnimationFrame = function(callback) {
+            var self = requestAnimationFrame;
+            self.queue.push(callback);
+            if (!self.timeout) {
+              self.timeout = setTimeout(function() {
+                var queue = self.queue;
+                self.queue = [];
+                self.timeout = null;
+                queue.forEach(function(q) {
+                  q();
+                });
+              }, 16);
+            }
+          };
+          requestAnimationFrame.queue = [];
+          requestAnimationFrame.timeout = null;
+        })();
+      }
+
+      window.initDofus = function(cb) {
+        var head = document.getElementsByTagName("head")[0];
+
+        var scriptScript = document.createElement("script");
+        scriptScript.addEventListener("load", function() {
+          var fixesScript = document.createElement("script");
+          fixesScript.src = "fixes.js";
+          head.appendChild(fixesScript);
+          cb();
+        });
+        scriptScript.src = "build/script.js";
+        head.appendChild(scriptScript);
+      };
+    </script>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="build/styles-native.css" />
+    <link rel="stylesheet" href="fixes.css" />
+  </head>
+  <body>
+  </body>
+  <script src="keymaster2.js"></script>
 </html>

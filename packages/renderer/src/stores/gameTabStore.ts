@@ -240,7 +240,7 @@ export const useGameTabStore = create<GameTabState>()(
       storage: createJSONStorage(() => electronStorage),
       partialize: (state) => ({
         ...state,
-        tabs: state.tabs.map(({ characterIcon: _, ...tab }) => tab),
+        tabs: state.tabs.map(({ characterIcon: _, isLoading: __, isReady: ___, ...tab }) => tab),
       }),
       merge: (persistedState, currentState) => {
         const persisted = (persistedState as Partial<GameTabState>) || {};
@@ -273,6 +273,8 @@ export const useGameTabStore = create<GameTabState>()(
           tabs: tabs.map((tab) => ({
             ...tab,
             isActive: tab.id === activeTabId,
+            isLoading: false,
+            isReady: false,
           })),
         };
       },

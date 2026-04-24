@@ -72,6 +72,10 @@ export class GameWindow extends EventEmitter {
     this._win.restore()
   }
 
+  close() {
+    this._win.close()
+  }
+
   setAudioMute(value: boolean) {
     this._globalMuted = value
     this._win.webContents.setAudioMuted(value)
@@ -142,14 +146,28 @@ export class GameWindow extends EventEmitter {
       logger.info(`Patched: ${patch.name} exposed`)
     }
 
-    const helperStripper = /;\s*\(\(\) => \{[\s\S]*?\$_deExposeLoginAndCert_v2[\s\S]*?\}\)\(\);/g
-    if (helperStripper.test(build)) {
-      build = build.replace(helperStripper, '')
+    if (!build.includes('Ignoring blocked delete for ')) {
+      const blockedDeleteMatch =
+        /(\w+)\.onblocked\s*=\s*function\(\)\s*\{\s*return\s+(\w+)\((\w+)\("Delete database operation was blocked, name: "\s*\+\s*(\w+)\)\)\s*\}/.exec(build)
+
+      if (blockedDeleteMatch) {
+        build = build.replace(
+          blockedDeleteMatch[0],
+          `${blockedDeleteMatch[1]}.onblocked = function() { return console.warn("Ignoring blocked delete for " + ${blockedDeleteMatch[4]}), ${blockedDeleteMatch[2]}() }`
+        )
+        changed = true
+        logger.info('Patched: blocked IndexedDB delete downgraded')
+      }
+    }
+
+    const helperStart = Math.max(build.lastIndexOf(';(function () {'), build.lastIndexOf(';(() => {'))
+    if (helperStart !== -1 && build.includes('$_deExposeLoginAndCert_v2', helperStart)) {
+      build = build.slice(0, helperStart).replace(/\s+$/, '')
       changed = true
     }
 
     if (!build.includes('$_deExposeLoginAndCert_v2')) {
-      build += getHelperSnippet()
+      build = build.replace(/\s*$/, '') + '\n' + getHelperSnippet()
       changed = true
       logger.info('Patched: helper snippet appended')
     }

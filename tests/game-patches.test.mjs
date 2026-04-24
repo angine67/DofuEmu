@@ -12,7 +12,7 @@ function setup() {
   fs.rmSync(tmpDir, { recursive: true, force: true })
   fs.mkdirSync(path.join(tmpDir, 'build'), { recursive: true })
 
-  for (const file of ['index.html', 'fixes.js', 'fixes.css', 'regex.json']) {
+  for (const file of ['index.html', 'fixes.js', 'fixes.css', 'regex.json', 'keymaster2.js']) {
     fs.copyFileSync(
       path.join(root, 'packages/main/game-base', file),
       path.join(tmpDir, file)
@@ -72,6 +72,19 @@ function applyProcessGamePatches() {
     if (m) {
       build = build.replace(m[0], `${m[0]},window.$_haapiAccount=${m[1]}.account`)
       results.push('$_haapiAccount')
+    }
+  }
+
+  if (!build.includes('Ignoring blocked delete for ')) {
+    const m = build.match(
+      /(\w+)\.onblocked\s*=\s*function\(\)\s*\{\s*return\s+(\w+)\((\w+)\("Delete database operation was blocked, name: "\s*\+\s*(\w+)\)\)\s*\}/
+    )
+    if (m) {
+      build = build.replace(
+        m[0],
+        `${m[1]}.onblocked = function() { return console.warn("Ignoring blocked delete for " + ${m[4]}), ${m[2]}() }`
+      )
+      results.push('blockedIndexedDbDelete')
     }
   }
 
@@ -160,6 +173,12 @@ function runTests() {
 
   test('$_authManager exposed', () => {
     assert(pgResults.includes('$_authManager'), '$_authManager not patched')
+  })
+
+  test('blocked IndexedDB deletes are downgraded', () => {
+    assert(pgResults.includes('blockedIndexedDbDelete'), 'blocked delete patch not applied')
+    const src = fs.readFileSync(path.join(tmpDir, 'build/script.js'), 'utf-8')
+    assert(src.includes('Ignoring blocked delete for '), 'missing blocked delete downgrade')
   })
 
   test('script.js still valid after processGame patches', () => {
