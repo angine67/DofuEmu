@@ -48,6 +48,24 @@ export interface NativeNotificationPayload {
   tabId?: string
 }
 
+export type AppUpdatePhase =
+  | 'idle'
+  | 'disabled'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error'
+
+export interface AppUpdateStatus {
+  phase: AppUpdatePhase
+  version?: string
+  percent?: number
+  message?: string
+  error?: string
+}
+
 export type HotkeyAction =
   | 'switch-tab-1'
   | 'switch-tab-2'
@@ -174,6 +192,10 @@ export enum IPCEvents {
   DOWNLOAD_GAME = 'download_game',
   OPEN_GAME_WINDOW = 'open_game_window',
   SAVE_CHARACTER_IMAGE = 'save_character_image',
+  GET_APP_UPDATE_STATUS = 'get_app_update_status',
+  CHECK_APP_UPDATE = 'check_app_update',
+  INSTALL_APP_UPDATE = 'install_app_update',
+  APP_UPDATE_STATUS = 'app_update_status',
   SHOW_NATIVE_NOTIFICATION = 'show_native_notification',
   NATIVE_NOTIFICATION_CLICK = 'native_notification_click',
   STORE_GET = 'store_get',

@@ -7,11 +7,11 @@ import { AddressInfo } from 'net'
 import { join } from 'path'
 import fs from 'fs'
 import ElectronStore from 'electron-store'
-import { IPCEvents, GameContext, NativeNotificationPayload } from '@dofemu/shared'
+import { IPCEvents, GameContext, NativeNotificationPayload, AppUpdateStatus } from '@dofemu/shared'
 import { get } from './constants'
 import { GameWindow } from './windows/game-window'
 import { UpdaterWindow } from './windows/updater-window'
-import { GameUpdater } from './updater'
+import { AppUpdater, GameUpdater } from './updater'
 import { logger } from './logger'
 import { platform } from 'os'
 
@@ -71,6 +71,7 @@ export class Application {
   private static _instance: Application | null = null
   private _gameWindow: GameWindow | null = null
   private _updaterWindow: UpdaterWindow | null = null
+  private _appUpdater: AppUpdater | null = null
   private readonly _server: Server
   private readonly _hash: string
   private _buildVersion = ''
@@ -136,7 +137,9 @@ export class Application {
   run() {
     this._loadVersions()
     this._setupIPCHandlers()
+    this._appUpdater = new AppUpdater((status) => this._broadcastAppUpdateStatus(status))
     this.ensureWindow()
+    this._appUpdater.start()
   }
 
   private _loadVersions() {
@@ -301,6 +304,24 @@ export class Application {
       })
     })
 
+    ipcMain.handle(IPCEvents.GET_APP_UPDATE_STATUS, () => {
+      return this._appUpdater?.getStatus() ?? {
+        phase: 'idle',
+        message: 'App updater is not initialized.'
+      } satisfies AppUpdateStatus
+    })
+
+    ipcMain.handle(IPCEvents.CHECK_APP_UPDATE, () => {
+      return this._appUpdater?.checkNow() ?? {
+        phase: 'idle',
+        message: 'App updater is not initialized.'
+      } satisfies AppUpdateStatus
+    })
+
+    ipcMain.on(IPCEvents.INSTALL_APP_UPDATE, () => {
+      this._appUpdater?.installNow()
+    })
+
     ipcMain.on(IPCEvents.SHOW_NATIVE_NOTIFICATION, (event, payload: NativeNotificationPayload) => {
       if (!Notification.isSupported() || !payload?.title) return
 
@@ -346,5 +367,11 @@ export class Application {
     ipcMain.on(IPCEvents.OPEN_GAME_WINDOW, () => {
       this._openGameWindow()
     })
+  }
+
+  private _broadcastAppUpdateStatus(status: AppUpdateStatus) {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send(IPCEvents.APP_UPDATE_STATUS, status)
+    }
   }
 }

@@ -10,15 +10,27 @@
     "dev": "node scripts/watch.mjs",
     "build": "node scripts/build.mjs",
     "dist": "npm run build && electron-builder",
+    "release": "npm run build && electron-builder --publish always",
+    "realse": "pnpm run release",
     "typecheck": "tsc --noEmit"
   },
   "build": {
     "appId": "com.dofemu.app",
     "productName": "DofEmu",
     "icon": "resources/icon.png",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "angine67",
+        "repo": "DofuEmu"
+      }
+    ],
     "mac": {
       "icon": "resources/icon.icns",
-      "target": "dmg",
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "category": "public.app-category.games",
       "protocols": [
         {
@@ -49,6 +61,7 @@
   "dependencies": {
     "@hono/node-server": "^1.14.0",
     "electron-store": "^8.2.0",
+    "electron-updater": "^6.8.3",
     "get-port": "^5.1.1",
     "hono": "^4.7.0"
   },

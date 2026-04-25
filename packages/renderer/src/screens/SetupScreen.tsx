@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { AlertTriangle, CheckCircle2, LoaderCircle, RefreshCw } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, LoaderCircle, RefreshCw, RotateCw } from 'lucide-react'
 import { colors } from '@/theme'
 import logoImg from '@/assets/logo.png'
+import type { AppUpdateStatus } from '@dofemu/shared'
 
-type Status = 'checking' | 'downloading' | 'done' | 'error'
+type Status = 'checking' | 'app-downloading' | 'app-ready' | 'downloading' | 'done' | 'error'
 
 const STEPS = [
   { title: 'Copying base files' },
@@ -40,17 +41,29 @@ function formatMode(installed: boolean): string {
 }
 
 function getHeadline(status: Status, installed: boolean): string {
-  if (status === 'checking') return 'Checking game files'
+  if (status === 'checking') return 'Checking updates'
+  if (status === 'app-downloading') return 'Updating DofEmu'
+  if (status === 'app-ready') return 'App update ready'
   if (status === 'done') return installed ? 'Update complete' : 'Install complete'
   if (status === 'error') return installed ? 'Update failed' : 'Install failed'
   return installed ? 'Updating game' : 'Installing game'
 }
 
 function getSummary(status: Status, installed: boolean): string {
-  if (status === 'checking') return 'Validating local files before starting.'
+  if (status === 'checking') return 'Checking the desktop app first, then game files.'
+  if (status === 'app-downloading') return 'Downloading the latest published release artifact.'
+  if (status === 'app-ready') return 'Restart DofEmu to install the downloaded app update.'
   if (status === 'done') return 'Launching the game.'
   if (status === 'error') return installed ? 'The existing install can still be opened.' : 'Retry the install.'
   return installed ? 'Applying only the required file updates.' : 'Downloading and patching the game files.'
+}
+
+function shouldRunGameUpdate(status: AppUpdateStatus): boolean {
+  return status.phase === 'disabled' || status.phase === 'not-available' || status.phase === 'error' || status.phase === 'idle'
+}
+
+function isActiveAppUpdate(status: AppUpdateStatus): boolean {
+  return status.phase === 'checking' || status.phase === 'available' || status.phase === 'downloading' || status.phase === 'downloaded'
 }
 
 export function SetupScreen() {
@@ -60,7 +73,10 @@ export function SetupScreen() {
   const [error, setError] = useState('')
   const [currentStep, setCurrentStep] = useState(0)
   const [hasExistingInstall, setHasExistingInstall] = useState(false)
+  const [appUpdate, setAppUpdate] = useState<AppUpdateStatus | null>(null)
   const didStartRef = useRef(false)
+  const gameUpdateStartedRef = useRef(false)
+  const installedRef = useRef(false)
   const launchTimeoutRef = useRef<number | null>(null)
 
   const scheduleLaunch = () => {
@@ -71,6 +87,8 @@ export function SetupScreen() {
   }
 
   const runUpdate = async (installed: boolean) => {
+    if (gameUpdateStartedRef.current) return
+    gameUpdateStartedRef.current = true
     setHasExistingInstall(installed)
     setStatus('downloading')
     setError('')
@@ -94,12 +112,52 @@ export function SetupScreen() {
     }
   }
 
+  const handleAppUpdateStatus = (update: AppUpdateStatus, installed: boolean) => {
+    setAppUpdate(update)
+
+    if (update.phase === 'checking' || update.phase === 'available') {
+      setStatus('checking')
+      setMessage(update.message ?? 'Checking for app update...')
+      setPercent(0)
+      return
+    }
+
+    if (update.phase === 'downloading') {
+      setStatus('app-downloading')
+      setMessage(update.message ?? 'Downloading app update...')
+      setPercent(update.percent ?? 0)
+      return
+    }
+
+    if (update.phase === 'downloaded') {
+      setStatus('app-ready')
+      setMessage(update.message ?? 'App update ready.')
+      setPercent(100)
+      return
+    }
+
+    if (shouldRunGameUpdate(update)) {
+      if (update.phase === 'error') {
+        window.dofemu.logger.warn('App update failed, continuing with game update', update.error)
+      }
+      void runUpdate(installed)
+    }
+  }
+
   useEffect(() => {
     if (didStartRef.current) return
     didStartRef.current = true
 
-    window.dofemu.checkGameInstalled().then((installed) => {
-      void runUpdate(installed)
+    window.dofemu.checkGameInstalled().then(async (installed) => {
+      installedRef.current = installed
+      setHasExistingInstall(installed)
+
+      const current = await window.dofemu.getAppUpdateStatus()
+      handleAppUpdateStatus(current, installed)
+      if (isActiveAppUpdate(current)) return
+
+      const checked = await window.dofemu.checkAppUpdate()
+      handleAppUpdateStatus(checked, installed)
     }).catch((err: unknown) => {
       setError(err instanceof Error ? err.message : String(err))
       setStatus('error')
@@ -107,6 +165,9 @@ export function SetupScreen() {
   }, [])
 
   useEffect(() => {
+    const unsubAppUpdate = window.dofemu.onAppUpdateStatus((update) => {
+      handleAppUpdateStatus(update, installedRef.current)
+    })
     const unsub = window.dofemu.onDownloadProgress((msg, pct) => {
       setMessage(msg)
       setPercent(pct)
@@ -116,7 +177,10 @@ export function SetupScreen() {
         scheduleLaunch()
       }
     })
-    return unsub
+    return () => {
+      unsubAppUpdate()
+      unsub()
+    }
   }, [])
 
   useEffect(() => {
@@ -128,10 +192,15 @@ export function SetupScreen() {
   }, [])
 
   const startDownload = async () => {
+    gameUpdateStartedRef.current = false
     await runUpdate(hasExistingInstall)
   }
 
-  const safePercent = Math.max(0, Math.min(100, status === 'done' ? 100 : percent))
+  const installAppUpdate = () => {
+    window.dofemu.installAppUpdate()
+  }
+
+  const safePercent = Math.max(0, Math.min(100, status === 'done' || status === 'app-ready' ? 100 : percent))
   const headline = getHeadline(status, hasExistingInstall)
   const summary = getSummary(status, hasExistingInstall)
   const primaryMessage = message || (status === 'checking' ? 'Waiting for updater...' : 'Preparing updater...')
@@ -175,6 +244,8 @@ export function SetupScreen() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             {status === 'done' ? (
               <CheckCircle2 size={16} color={colors.accentText} />
+            ) : status === 'app-ready' ? (
+              <CheckCircle2 size={16} color={colors.accentText} />
             ) : status === 'error' ? (
               <AlertTriangle size={16} color={colors.danger} />
             ) : (
@@ -205,10 +276,32 @@ export function SetupScreen() {
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 8, fontSize: 11, color: colors.textMuted }}>
-            <span>{STEPS[Math.min(currentStep, STEPS.length - 1)]?.title}</span>
+            <span>{status.startsWith('app-') ? `DofEmu ${appUpdate?.version ?? 'update'}` : STEPS[Math.min(currentStep, STEPS.length - 1)]?.title}</span>
             <span style={{ fontFamily: 'var(--font-mono)' }}>{safePercent.toFixed(0)}%</span>
           </div>
         </div>
+
+        {status === 'app-ready' && (
+          <button
+            onClick={installAppUpdate}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '9px 12px',
+              borderRadius: 8,
+              border: `1px solid ${colors.accentBorder}`,
+              background: 'rgba(201,162,77,0.14)',
+              color: colors.accentText,
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            <RotateCw size={14} />
+            <span>Restart and Update</span>
+          </button>
+        )}
 
         {status === 'error' && (
           <button

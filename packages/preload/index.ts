@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
-import { IPCEvents, GameContext, NativeNotificationPayload } from '@dofemu/shared'
+import { IPCEvents, GameContext, NativeNotificationPayload, AppUpdateStatus } from '@dofemu/shared'
 
 const dofemuApi = {
   fetchGameContext: async (): Promise<GameContext> => {
@@ -75,6 +75,24 @@ const dofemuApi = {
 
   saveCharacterImage: (name: string, imageData: string) => {
     ipcRenderer.send(IPCEvents.SAVE_CHARACTER_IMAGE, name, imageData)
+  },
+
+  getAppUpdateStatus: async (): Promise<AppUpdateStatus> => {
+    return ipcRenderer.invoke(IPCEvents.GET_APP_UPDATE_STATUS)
+  },
+
+  checkAppUpdate: async (): Promise<AppUpdateStatus> => {
+    return ipcRenderer.invoke(IPCEvents.CHECK_APP_UPDATE)
+  },
+
+  installAppUpdate: () => {
+    ipcRenderer.send(IPCEvents.INSTALL_APP_UPDATE)
+  },
+
+  onAppUpdateStatus: (cb: (status: AppUpdateStatus) => void): (() => void) => {
+    const listener = (_: IpcRendererEvent, status: AppUpdateStatus) => cb(status)
+    ipcRenderer.on(IPCEvents.APP_UPDATE_STATUS, listener)
+    return () => { ipcRenderer.removeListener(IPCEvents.APP_UPDATE_STATUS, listener) }
   },
 
   showNativeNotification: (payload: NativeNotificationPayload) => {

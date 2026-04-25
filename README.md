@@ -49,6 +49,16 @@ pnpm run build
 pnpm run dist
 ```
 
+## Release Updates
+
+Packaged builds check GitHub Releases for app updates before updating game files. Publish release artifacts with:
+
+```bash
+GH_TOKEN=... pnpm run release
+```
+
+The release must include the Electron Builder update metadata (`latest.yml`, `latest-mac.yml`, blockmaps) alongside the platform installers. macOS auto-update also requires signed builds.
+
 ## Stack
 
 | Layer | Tech |
